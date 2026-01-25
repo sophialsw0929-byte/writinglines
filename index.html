@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>連線遊戲 V2.7 (Square & Fit)</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: black;
+            touch-action: none; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+        canvas {
+            display: block;
+        }
+        /* 左上角隱形觸發區 */
+        #settingsTrigger {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 120px;
+            height: 120px;
+            z-index: 10;
+            cursor: pointer;
+        }
+        
+        /* 設定選單樣式 */
+        #settingsModal {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(20, 20, 20, 0.95);
+            z-index: 20;
+            overflow-y: auto;
+            color: white;
+            padding: 20px;
+            box-sizing: border-box;
+            touch-action: pan-y; 
+        }
+        
+        .settings-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #333;
+            padding: 20px;
+            border-radius: 15px;
+            border: 2px solid #555;
+        }
+
+        h2 { margin-top: 0; text-align: center; color: #FFD700; }
+        h3 { border-bottom: 1px solid #555; padding-bottom: 5px; margin-top: 20px; font-size: 1.2rem; }
+
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn-option {
+            background: #444;
+            border: 2px solid #666;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            flex: 1;
+            text-align: center;
+        }
+        .btn-option.active {
+            background: #007AFF;
+            border-color: #0056b3;
+            font-weight: bold;
+        }
+
+        input[type=range] { width: 100%; height: 25px; margin: 10px 0; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+
+        .angle-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .angle-option {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #444;
+            border: 2px solid #666;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .angle-option.active { background: #007AFF; border-color: white; }
+        .angle-icon { stroke: white; stroke-width: 3; fill: none; }
+
+        .img-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .img-option {
+            aspect-ratio: 1;
+            background: #222;
+            border: 2px solid #444;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            overflow: hidden;
+            position: relative;
+        }
+        .img-option.active { border-color: #007AFF; border-width: 4px; }
+        
+        /* 設定選單內的圖片也改為 contain 顯示，方便預覽 */
+        .img-option img { width: 100%; height: 100%; object-fit: contain; background: #000; }
+        
+        .img-label { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.7); font-size: 10px; text-align: center; }
+
+        #closeSettings {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin-top: 30px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+<div id="settingsTrigger"></div>
+
+<div id="settingsModal">
+    <div class="settings-container">
+        <h2>遊戲設定</h2>
+        
+        <h3>1. 錯誤判定 (偏離容忍度)</h3>
+        <div class="btn-group" id="toleranceGroup">
+            <div class="btn-option" data-value="200">寬鬆</div>
+            <div class="btn-option" data-value="120">標準</div>
+            <div class="btn-option active" data-value="60">嚴謹</div>
+        </div>
+
+        <h3>2. 線段設定</h3>
+        <label>線段粗細: <span id="widthVal">40</span>px</label>
+        <input type="range" id="lineWidthInput" min="10" max="100" value="40">
+        
+        <label>圖像大小: <span id="sizeVal">150</span>px</label>
+        <input type="range" id="imgSizeInput" min="80" max="300" value="150">
+
+        <h3>3. 線段長度</h3>
+        <div class="btn-group" id="lengthGroup">
+            <div class="btn-option" data-value="short">短 (35%)</div>
+            <div class="btn-option active" data-value="medium">中 (65%)</div>
+            <div class="btn-option" data-value="long">長 (95%)</div>
+        </div>
+
+        <h3>4. 線段角度 (可多選)</h3>
+        <div class="btn-option" id="allAnglesBtn" style="margin-bottom: 10px; width: 100%">隨機全角度</div>
+        <div class="angle-grid" id="angleGrid"></div>
+
+        <h3>5. 選擇食物圖片</h3>
+        <div class="img-grid" id="foodGrid"></div>
+
+        <h3>6. 結算設定 (回合數)</h3>
+        <label>每局回合數: <span id="roundsVal">1</span></label>
+        <input type="range" id="roundsInput" min="1" max="10" value="1">
+
+        <button id="closeSettings">儲存並回到遊戲</button>
+    </div>
+</div>
+
+<script>
+    // --- 強制鎖定縮放腳本 ---
+    document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+    document.addEventListener('gesturechange', function(e) { e.preventDefault(); }); 
+    document.addEventListener('gestureend', function(e) { e.preventDefault(); });
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', function(e) {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) { e.preventDefault(); }
+        lastTouchEnd = now;
+    }, false);
+    document.addEventListener('wheel', function(e) { if (e.ctrlKey) { e.preventDefault(); } }, { passive: false });
+    // --- 縮放鎖定結束 ---
+
+    // --- 音效系統 ---
+    const audioSys = {
+        bgm: new Audio('bgm.mp3'),
+        cheer: new Audio('cheer.mp3'),
+        started: false,
+        init: function() {
+            this.bgm.loop = true;
+            this.bgm.volume = 0.5;
+            this.cheer.volume = 1.0;
+        },
+        playBGM: function() {
+            if (!this.started) {
+                this.bgm.play().then(() => { this.started = true; }).catch(e => {});
+            } else {
+                if(this.bgm.paused) this.bgm.play();
+            }
+        },
+        playWin: function() {
+            this.bgm.volume = 0.1; 
+            this.cheer.currentTime = 0;
+            this.cheer.play().catch(e => {});
+        },
+        reset: function() {
+            this.cheer.pause();
+            this.cheer.currentTime = 0;
+            if (this.started) this.bgm.volume = 0.5;
+        }
+    };
+    audioSys.init();
+
+    // --- 全域設定 ---
+    const CONFIG = {
+        pathWidth: 40,
+        tolerance: 60,
+        imageSize: 150,
+        winImageSize: 300,
+        snapSpeed: 0.15,
+        lineLengthMode: 'medium',
+        activeAngles: [],
+        isAllAngles: true,
+        currentFoodIndex: 1,
+        touchPadding: 60,
+        roundsPerSession: 1
+    };
+
+    const state = {
+        isla: { x: 0, y: 0, originalX: 0, originalY: 0, isDragging: false, img: new Image() },
+        food: { x: 0, y: 0, originalX: 0, originalY: 0, isDragging: false, img: new Image() },
+        gameWon: false,
+        winAnimationStep: 0,
+        width: 0,
+        height: 0,
+        startTime: null,
+        endTime: null,
+        currentErrorCount: 0,
+        currentRound: 1,
+        sessionTotalErrors: 0,
+        sessionTotalTime: 0,
+        isSessionFinished: false
+    };
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    state.isla.img.src = 'isla1.jpg';
+    state.food.img.src = 'food1.jpg';
+
+    function handleImageError(obj, color, text) {
+        const dummyCanvas = document.createElement('canvas');
+        dummyCanvas.width = 300;
+        dummyCanvas.height = 300;
+        const dCtx = dummyCanvas.getContext('2d');
+        dCtx.fillStyle = color;
+        dCtx.fillRect(0,0, 300, 300);
+        dCtx.fillStyle = 'black';
+        dCtx.font = 'bold 40px Arial';
+        dCtx.textAlign = 'center';
+        dCtx.textBaseline = 'middle';
+        dCtx.fillText(text, 150, 150);
+        obj.img.src = dummyCanvas.toDataURL();
+    }
+
+    state.isla.img.onerror = () => handleImageError(state.isla, '#FFD700', 'ISLA');
+    state.food.img.onerror = () => handleImageError(state.food, '#FF6347', 'FOOD ' + CONFIG.currentFoodIndex);
+
+    function resize() {
+        state.width = window.innerWidth;
+        state.height = window.innerHeight;
+        canvas.width = state.width;
+        canvas.height = state.height;
+        if (!state.gameWon) resetPositions();
+    }
+
+    function checkCollision(x1, y1, r1, x2, y2, r2, padding = 0) {
+        const dist = Math.hypot(x2 - x1, y2 - y1);
+        const radiusSum = (r1 + r2) * 0.5;
+        return dist < (radiusSum + padding);
+    }
+
+    function resetPositions() {
+        audioSys.reset();
+        state.currentErrorCount = 0;
+        state.startTime = null; 
+        state.endTime = null;
+
+        const margin = CONFIG.imageSize / 2 + 20;
+        const availableW = state.width - margin * 2;
+        const availableH = state.height - margin * 2;
+        
+        let angleDeg = 0;
+        if (CONFIG.isAllAngles) {
+            angleDeg = Math.random() * 360;
+        } else if (CONFIG.activeAngles.length > 0) {
+            const pick = CONFIG.activeAngles[Math.floor(Math.random() * CONFIG.activeAngles.length)];
+            angleDeg = pick + (Math.random() > 0.5 ? 180 : 0);
+        } else {
+            angleDeg = Math.random() * 360;
+        }
+        const angleRad = angleDeg * (Math.PI / 180);
+
+        const absCos = Math.abs(Math.cos(angleRad));
+        const absSin = Math.abs(Math.sin(angleRad));
+        const maxLenW = absCos > 0.001 ? availableW / absCos : Infinity;
+        const maxLenH = absSin > 0.001 ? availableH / absSin : Infinity;
+        const maxPossibleLen = Math.min(maxLenW, maxLenH);
+
+        let lenRatio = 0.65;
+        if (CONFIG.lineLengthMode === 'short') lenRatio = 0.35;
+        if (CONFIG.lineLengthMode === 'long') lenRatio = 0.95; 
+        
+        const lineLen = maxPossibleLen * lenRatio;
+        const dx = (lineLen / 2) * Math.cos(angleRad);
+        const dy = (lineLen / 2) * Math.sin(angleRad);
+
+        const safeW = state.width - 2 * margin - 2 * Math.abs(dx);
+        const safeH = state.height - 2 * margin - 2 * Math.abs(dy);
+
+        const centerX = margin + Math.abs(dx) + Math.random() * Math.max(0, safeW);
+        const centerY = margin + Math.abs(dy) + Math.random() * Math.max(0, safeH);
+
+        state.isla.originalX = centerX - dx;
+        state.isla.originalY = centerY - dy;
+        state.food.originalX = centerX + dx;
+        state.food.originalY = centerY + dy;
+
+        state.isla.x = state.isla.originalX;
+        state.isla.y = state.isla.originalY;
+        state.food.x = state.food.originalX;
+        state.food.y = state.food.originalY;
+    }
+
+    function distToSegment(px, py, x1, y1, x2, y2) {
+        const l2 = (x1 - x2) ** 2 + (y1 - y2) ** 2;
+        if (l2 === 0) return Math.hypot(px - x1, py - y1);
+        let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+    }
+
+    // --- 核心修改：方形 + 完整顯示 (Contain) ---
+    function drawImageCentered(img, x, y, size) {
+        if (!img.complete || img.naturalWidth === 0) return;
+
+        // 1. 繪製方形背景 (用於填補空白)
+        ctx.fillStyle = '#222';
+        // 因為 x, y 是中心點，所以左上角是 x - size/2
+        ctx.fillRect(x - size/2, y - size/2, size, size);
+
+        // 2. 計算縮放比例 (Min for Contain)
+        // 使用 min 確保圖片完整塞入，不會超出
+        const scale = Math.min(size / img.width, size / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+
+        // 3. 繪製圖片 (居中)
+        ctx.drawImage(img, x - w/2, y - h/2, w, h);
+
+        // 4. 繪製白色邊框
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(x - size/2, y - size/2, size, size);
+    }
+
+    function draw() {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, state.width, state.height);
+
+        if (!state.gameWon) {
+            ctx.fillStyle = '#666';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Round ${state.currentRound} / ${CONFIG.roundsPerSession}`, 20, 30);
+        }
+
+        if (state.gameWon) {
+            drawWin();
+            return;
+        }
+
+        // 紅色輔助邊界牆
+        const dx = state.food.originalX - state.isla.originalX;
+        const dy = state.food.originalY - state.isla.originalY;
+        const len = Math.hypot(dx, dy);
+        if (len > 0) {
+            const perpX = -dy / len;
+            const perpY = dx / len;
+            const offsetX = perpX * CONFIG.tolerance;
+            const offsetY = perpY * CONFIG.tolerance;
+
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 50, 50, 0.4)';
+            ctx.lineWidth = 8;
+            ctx.lineCap = 'round';
+            ctx.moveTo(state.isla.originalX + offsetX, state.isla.originalY + offsetY);
+            ctx.lineTo(state.food.originalX + offsetX, state.food.originalY + offsetY);
+            ctx.moveTo(state.isla.originalX - offsetX, state.isla.originalY - offsetY);
+            ctx.lineTo(state.food.originalX - offsetX, state.food.originalY - offsetY);
+            ctx.stroke();
+        }
+
+        // 白色主線
+        ctx.beginPath();
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = CONFIG.pathWidth;
+        ctx.lineCap = 'round';
+        ctx.moveTo(state.isla.originalX, state.isla.originalY);
+        ctx.lineTo(state.food.originalX, state.food.originalY);
+        ctx.stroke();
+
+        drawImageCentered(state.isla.img, state.isla.x, state.isla.y, CONFIG.imageSize);
+        drawImageCentered(state.food.img, state.food.x, state.food.y, CONFIG.imageSize);
+    }
+
+    function drawWin() {
+        state.winAnimationStep += 0.02;
+        const progress = Math.min(1, state.winAnimationStep);
+        const centerY = state.height / 2;
+        
+        const targetX_Isla = state.width / 2 - CONFIG.winImageSize / 1.7;
+        const currentX_Isla = (state.width * 0.1) + (targetX_Isla - state.width * 0.1) * progress;
+        
+        const targetX_Food = state.width / 2 + CONFIG.winImageSize / 1.7;
+        const currentX_Food = (state.width * 0.9) + (targetX_Food - state.width * 0.9) * progress;
+
+        drawImageCentered(state.isla.img, currentX_Isla, centerY, CONFIG.winImageSize);
+        drawImageCentered(state.food.img, currentX_Food, centerY, CONFIG.winImageSize);
+
+        if (progress > 0.8) {
+            const scale = 1 + Math.sin(Date.now() / 150) * 0.1;
+            ctx.save();
+            ctx.translate(state.width/2, state.height/2 - 50);
+            ctx.scale(scale, scale);
+            
+            ctx.fillStyle = "#E0192C";
+            ctx.beginPath();
+            const hSize = 160; 
+            ctx.moveTo(0, hSize * 0.3);
+            ctx.bezierCurveTo(0, -hSize * 0.3, -hSize, -hSize * 0.3, -hSize, hSize * 0.3);
+            ctx.bezierCurveTo(-hSize, hSize * 0.8, 0, hSize * 1.3, 0, hSize * 1.3);
+            ctx.bezierCurveTo(0, hSize * 1.3, hSize, hSize * 0.8, hSize, hSize * 0.3);
+            ctx.bezierCurveTo(hSize, -hSize * 0.3, 0, -hSize * 0.3, 0, hSize * 0.3);
+            ctx.fill();
+            ctx.fillStyle = "rgba(255,255,255,0.3)";
+            ctx.beginPath();
+            ctx.ellipse(-hSize*0.5, 0, hSize*0.15, hSize*0.08, -0.5, 0, Math.PI*2);
+            ctx.fill();
+            ctx.restore();
+
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.font = 'bold 28px sans-serif';
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 4;
+            
+            let line1 = "";
+            let line2 = "";
+            const roundTime = ((state.endTime - state.startTime) / 1000);
+            
+            if (state.isSessionFinished) {
+                const avgTime = (state.sessionTotalTime / CONFIG.roundsPerSession).toFixed(1);
+                line1 = `★ 總結算 (共${CONFIG.roundsPerSession}局) ★`;
+                line2 = `總錯誤: ${state.sessionTotalErrors} 次  |  平均時間: ${avgTime} 秒`;
+                ctx.fillStyle = '#FFD700';
+            } else {
+                line1 = `Round ${state.currentRound} / ${CONFIG.roundsPerSession} 完成!`;
+                line2 = `錯誤: ${state.currentErrorCount}  |  時間: ${roundTime.toFixed(1)} 秒`;
+            }
+
+            const textY = state.height - 50;
+            ctx.strokeText(line1, state.width/2, textY - 35);
+            ctx.fillText(line1, state.width/2, textY - 35);
+            
+            ctx.font = 'bold 32px sans-serif';
+            ctx.strokeText(line2, state.width/2, textY);
+            ctx.fillText(line2, state.width/2, textY);
+            ctx.restore();
+        }
+    }
+
+    function handleStart(x, y) {
+        audioSys.playBGM();
+
+        if (state.gameWon) {
+            if (state.isSessionFinished) {
+                state.currentRound = 1;
+                state.sessionTotalErrors = 0;
+                state.sessionTotalTime = 0;
+                state.isSessionFinished = false;
+            } else {
+                state.currentRound++;
+            }
+            state.gameWon = false;
+            state.winAnimationStep = 0;
+            resetPositions();
+            return;
+        }
+
+        const hitIsla = checkCollision(x, y, 1, state.isla.x, state.isla.y, CONFIG.imageSize, CONFIG.touchPadding);
+        const hitFood = checkCollision(x, y, 1, state.food.x, state.food.y, CONFIG.imageSize, CONFIG.touchPadding);
+
+        if (hitIsla) {
+            state.isla.isDragging = true;
+            if(!state.startTime) state.startTime = Date.now();
+        } else if (hitFood) {
+            state.food.isDragging = true;
+            if(!state.startTime) state.startTime = Date.now();
+        }
+    }
+
+    function handleMove(x, y) {
+        let active = state.isla.isDragging ? state.isla : (state.food.isDragging ? state.food : null);
+        let target = state.isla.isDragging ? state.food : state.isla;
+        
+        if (active) {
+            active.x = x;
+            active.y = y;
+
+            const deviation = distToSegment(x, y, state.isla.originalX, state.isla.originalY, state.food.originalX, state.food.originalY);
+            if (deviation > CONFIG.tolerance) {
+                active.isDragging = false;
+                state.currentErrorCount++; 
+                if (navigator.vibrate) {
+                    navigator.vibrate(300);
+                }
+            }
+
+            if (checkCollision(active.x, active.y, CONFIG.imageSize, target.x, target.y, CONFIG.imageSize)) {
+                state.gameWon = true;
+                state.endTime = Date.now();
+                active.isDragging = false;
+                const timeTaken = (state.endTime - state.startTime) / 1000;
+                state.sessionTotalErrors += state.currentErrorCount;
+                state.sessionTotalTime += timeTaken;
+                if (state.currentRound >= CONFIG.roundsPerSession) {
+                    state.isSessionFinished = true;
+                }
+                audioSys.playWin();
+            }
+        }
+    }
+
+    function handleEnd() {
+        state.isla.isDragging = false;
+        state.food.isDragging = false;
+    }
+
+    canvas.addEventListener('touchstart', e => { 
+        if(e.touches.length > 1) { e.preventDefault(); return; }
+        e.preventDefault(); 
+        handleStart(e.touches[0].clientX, e.touches[0].clientY); 
+    }, {passive: false});
+
+    canvas.addEventListener('touchmove', e => { 
+        if(e.touches.length > 1) { e.preventDefault(); return; }
+        e.preventDefault(); 
+        handleMove(e.touches[0].clientX, e.touches[0].clientY); 
+    }, {passive: false});
+
+    canvas.addEventListener('touchend', e => { 
+        e.preventDefault(); 
+        handleEnd(); 
+    });
+    
+    canvas.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
+    canvas.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', handleEnd);
+
+    function loop() {
+        if (!state.isla.isDragging && !state.gameWon) {
+            state.isla.x += (state.isla.originalX - state.isla.x) * CONFIG.snapSpeed;
+            state.isla.y += (state.isla.originalY - state.isla.y) * CONFIG.snapSpeed;
+        }
+        if (!state.food.isDragging && !state.gameWon) {
+            state.food.x += (state.food.originalX - state.food.x) * CONFIG.snapSpeed;
+            state.food.y += (state.food.originalY - state.food.y) * CONFIG.snapSpeed;
+        }
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    // --- 設定 UI 邏輯 ---
+    const settingsTrigger = document.getElementById('settingsTrigger');
+    const settingsModal = document.getElementById('settingsModal');
+    let pressTimer;
+
+    const startPress = () => { 
+        audioSys.playBGM();
+        pressTimer = setTimeout(() => { settingsModal.style.display = 'block'; }, 800); 
+    };
+    const endPress = () => { clearTimeout(pressTimer); };
+    
+    settingsTrigger.addEventListener('touchstart', startPress);
+    settingsTrigger.addEventListener('touchend', endPress);
+    settingsTrigger.addEventListener('mousedown', startPress);
+    settingsTrigger.addEventListener('mouseup', endPress);
+
+    const tolBtns = document.querySelectorAll('#toleranceGroup .btn-option');
+    tolBtns.forEach(btn => {
+        btn.onclick = () => {
+            tolBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            CONFIG.tolerance = parseInt(btn.dataset.value);
+        }
+    });
+
+    const lwInput = document.getElementById('lineWidthInput');
+    const wVal = document.getElementById('widthVal');
+    lwInput.oninput = () => { CONFIG.pathWidth = parseInt(lwInput.value); wVal.innerText = lwInput.value; };
+
+    const isInput = document.getElementById('imgSizeInput');
+    const sVal = document.getElementById('sizeVal');
+    isInput.oninput = () => { CONFIG.imageSize = parseInt(isInput.value); sVal.innerText = isInput.value; };
+
+    const lenBtns = document.querySelectorAll('#lengthGroup .btn-option');
+    lenBtns.forEach(btn => {
+        btn.onclick = () => {
+            lenBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            CONFIG.lineLengthMode = btn.dataset.value;
+        }
+    });
+
+    const roundsInput = document.getElementById('roundsInput');
+    const roundsVal = document.getElementById('roundsVal');
+    roundsInput.oninput = () => {
+        CONFIG.roundsPerSession = parseInt(roundsInput.value);
+        roundsVal.innerText = roundsInput.value;
+    };
+
+    const anglesData = [
+        { deg: 0, label: '橫線' },
+        { deg: 90, label: '直線' },
+        { deg: 30, label: '30°' },
+        { deg: 45, label: '45°' },
+        { deg: 60, label: '60°' }
+    ];
+    const angleGrid = document.getElementById('angleGrid');
+    const allAnglesBtn = document.getElementById('allAnglesBtn');
+
+    function renderAngleIcons() {
+        angleGrid.innerHTML = '';
+        anglesData.forEach(a => {
+            const div = document.createElement('div');
+            div.className = 'angle-option';
+            if (CONFIG.activeAngles.includes(a.deg)) div.classList.add('active');
+            
+            const r = a.deg * Math.PI / 180;
+            const x = 20 * Math.cos(r);
+            const y = 20 * Math.sin(r);
+            div.innerHTML = `<svg width="40" height="40" viewBox="-20 -20 40 40"><line x1="${-x}" y1="${-y}" x2="${x}" y2="${y}" class="angle-icon" /></svg>`;
+            
+            div.onclick = () => toggleAngle(a.deg, div);
+            angleGrid.appendChild(div);
+        });
+    }
+
+    function toggleAngle(deg, el) {
+        CONFIG.isAllAngles = false;
+        allAnglesBtn.classList.remove('active');
+        
+        if (CONFIG.activeAngles.includes(deg)) {
+            CONFIG.activeAngles = CONFIG.activeAngles.filter(d => d !== deg);
+            el.classList.remove('active');
+        } else {
+            CONFIG.activeAngles.push(deg);
+            el.classList.add('active');
+        }
+        
+        if (CONFIG.activeAngles.length === 0) {
+            CONFIG.isAllAngles = true;
+            allAnglesBtn.classList.add('active');
+        }
+    }
+
+    allAnglesBtn.onclick = () => {
+        CONFIG.isAllAngles = true;
+        CONFIG.activeAngles = [];
+        allAnglesBtn.classList.add('active');
+        renderAngleIcons();
+    }
+    
+    allAnglesBtn.classList.add('active');
+    renderAngleIcons();
+
+    const foodGrid = document.getElementById('foodGrid');
+    for (let i = 1; i <= 8; i++) {
+        const div = document.createElement('div');
+        div.className = 'img-option' + (i === 1 ? ' active' : '');
+        div.innerHTML = `<img src="food${i}.jpg" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjNDQ0Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IndoaXRlIj5GNzwvdGV4dD48L3N2Zz4='"><div class="img-label">F${i}</div>`;
+        
+        div.onclick = () => {
+            document.querySelectorAll('.img-option').forEach(d => d.classList.remove('active'));
+            div.classList.add('active');
+            CONFIG.currentFoodIndex = i;
+            state.food.img.src = `food${i}.jpg`;
+            state.food.img.onload = null; 
+            state.food.img.onerror = () => handleImageError(state.food, '#FF6347', 'FOOD ' + i);
+        };
+        foodGrid.appendChild(div);
+    }
+
+    document.getElementById('closeSettings').onclick = () => {
+        settingsModal.style.display = 'none';
+    };
+
+    window.onload = () => {
+        resize();
+        loop();
+    };
+
+</script>
+</body>
+</html>
