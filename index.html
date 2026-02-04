@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>連線遊戲 V2.7 (Square & Fit)</title>
+    <title>連線遊戲 V2.8 (Anti-Touch)</title>
     <style>
         html, body {
             margin: 0;
@@ -23,7 +23,6 @@
         canvas {
             display: block;
         }
-        /* 左上角隱形觸發區 */
         #settingsTrigger {
             position: absolute;
             top: 0;
@@ -33,8 +32,6 @@
             z-index: 10;
             cursor: pointer;
         }
-        
-        /* 設定選單樣式 */
         #settingsModal {
             display: none;
             position: absolute;
@@ -50,7 +47,6 @@
             box-sizing: border-box;
             touch-action: pan-y; 
         }
-        
         .settings-container {
             max-width: 800px;
             margin: 0 auto;
@@ -59,10 +55,8 @@
             border-radius: 15px;
             border: 2px solid #555;
         }
-
         h2 { margin-top: 0; text-align: center; color: #FFD700; }
         h3 { border-bottom: 1px solid #555; padding-bottom: 5px; margin-top: 20px; font-size: 1.2rem; }
-
         .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
         .btn-option {
             background: #444;
@@ -80,10 +74,8 @@
             border-color: #0056b3;
             font-weight: bold;
         }
-
         input[type=range] { width: 100%; height: 25px; margin: 10px 0; }
         label { display: block; margin-bottom: 8px; font-weight: bold; }
-
         .angle-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
         .angle-option {
             height: 60px;
@@ -97,7 +89,6 @@
         }
         .angle-option.active { background: #007AFF; border-color: white; }
         .angle-icon { stroke: white; stroke-width: 3; fill: none; }
-
         .img-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
         .img-option {
             aspect-ratio: 1;
@@ -112,12 +103,8 @@
             position: relative;
         }
         .img-option.active { border-color: #007AFF; border-width: 4px; }
-        
-        /* 設定選單內的圖片也改為 contain 顯示，方便預覽 */
         .img-option img { width: 100%; height: 100%; object-fit: contain; background: #000; }
-        
         .img-label { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.7); font-size: 10px; text-align: center; }
-
         #closeSettings {
             display: block;
             width: 100%;
@@ -140,56 +127,47 @@
 <div id="settingsModal">
     <div class="settings-container">
         <h2>遊戲設定</h2>
-        
         <h3>1. 錯誤判定 (偏離容忍度)</h3>
         <div class="btn-group" id="toleranceGroup">
             <div class="btn-option" data-value="200">寬鬆</div>
             <div class="btn-option" data-value="120">標準</div>
             <div class="btn-option active" data-value="60">嚴謹</div>
         </div>
-
         <h3>2. 線段設定</h3>
         <label>線段粗細: <span id="widthVal">40</span>px</label>
         <input type="range" id="lineWidthInput" min="10" max="100" value="40">
-        
         <label>圖像大小: <span id="sizeVal">150</span>px</label>
         <input type="range" id="imgSizeInput" min="80" max="300" value="150">
-
         <h3>3. 線段長度</h3>
         <div class="btn-group" id="lengthGroup">
             <div class="btn-option" data-value="short">短 (35%)</div>
             <div class="btn-option active" data-value="medium">中 (65%)</div>
             <div class="btn-option" data-value="long">長 (95%)</div>
         </div>
-
         <h3>4. 線段角度 (可多選)</h3>
         <div class="btn-option" id="allAnglesBtn" style="margin-bottom: 10px; width: 100%">隨機全角度</div>
         <div class="angle-grid" id="angleGrid"></div>
-
         <h3>5. 選擇食物圖片</h3>
         <div class="img-grid" id="foodGrid"></div>
-
         <h3>6. 結算設定 (回合數)</h3>
         <label>每局回合數: <span id="roundsVal">1</span></label>
         <input type="range" id="roundsInput" min="1" max="10" value="1">
-
         <button id="closeSettings">儲存並回到遊戲</button>
     </div>
 </div>
 
 <script>
-    // --- 強制鎖定縮放腳本 ---
-    document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
-    document.addEventListener('gesturechange', function(e) { e.preventDefault(); }); 
-    document.addEventListener('gestureend', function(e) { e.preventDefault(); });
+    // --- 縮放鎖定 ---
+    document.addEventListener('gesturestart', e => e.preventDefault());
+    document.addEventListener('gesturechange', e => e.preventDefault()); 
+    document.addEventListener('gestureend', e => e.preventDefault());
     let lastTouchEnd = 0;
-    document.addEventListener('touchend', function(e) {
+    document.addEventListener('touchend', e => {
         const now = (new Date()).getTime();
         if (now - lastTouchEnd <= 300) { e.preventDefault(); }
         lastTouchEnd = now;
     }, false);
-    document.addEventListener('wheel', function(e) { if (e.ctrlKey) { e.preventDefault(); } }, { passive: false });
-    // --- 縮放鎖定結束 ---
+    document.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
 
     // --- 音效系統 ---
     const audioSys = {
@@ -249,7 +227,10 @@
         currentRound: 1,
         sessionTotalErrors: 0,
         sessionTotalTime: 0,
-        isSessionFinished: false
+        isSessionFinished: false,
+        
+        // --- V2.8 新增：防誤觸鎖定變數 ---
+        activeTouchId: null // 用來記錄當前「有效手指」的 ID
     };
 
     const canvas = document.getElementById('gameCanvas');
@@ -295,6 +276,7 @@
         state.currentErrorCount = 0;
         state.startTime = null; 
         state.endTime = null;
+        state.activeTouchId = null; // 重置觸控鎖定
 
         const margin = CONFIG.imageSize / 2 + 20;
         const availableW = state.width - margin * 2;
@@ -350,25 +332,17 @@
         return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
     }
 
-    // --- 核心修改：方形 + 完整顯示 (Contain) ---
     function drawImageCentered(img, x, y, size) {
         if (!img.complete || img.naturalWidth === 0) return;
-
-        // 1. 繪製方形背景 (用於填補空白)
+        // 方形背景填補
         ctx.fillStyle = '#222';
-        // 因為 x, y 是中心點，所以左上角是 x - size/2
         ctx.fillRect(x - size/2, y - size/2, size, size);
-
-        // 2. 計算縮放比例 (Min for Contain)
-        // 使用 min 確保圖片完整塞入，不會超出
+        // Contain 縮放
         const scale = Math.min(size / img.width, size / img.height);
         const w = img.width * scale;
         const h = img.height * scale;
-
-        // 3. 繪製圖片 (居中)
         ctx.drawImage(img, x - w/2, y - h/2, w, h);
-
-        // 4. 繪製白色邊框
+        // 白色外框
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 4;
         ctx.strokeRect(x - size/2, y - size/2, size, size);
@@ -390,7 +364,7 @@
             return;
         }
 
-        // 紅色輔助邊界牆
+        // 紅色輔助牆
         const dx = state.food.originalX - state.isla.originalX;
         const dy = state.food.originalY - state.isla.originalY;
         const len = Math.hypot(dx, dy);
@@ -411,7 +385,7 @@
             ctx.stroke();
         }
 
-        // 白色主線
+        // 主線
         ctx.beginPath();
         ctx.strokeStyle = 'white';
         ctx.lineWidth = CONFIG.pathWidth;
@@ -484,7 +458,6 @@
             const textY = state.height - 50;
             ctx.strokeText(line1, state.width/2, textY - 35);
             ctx.fillText(line1, state.width/2, textY - 35);
-            
             ctx.font = 'bold 32px sans-serif';
             ctx.strokeText(line2, state.width/2, textY);
             ctx.fillText(line2, state.width/2, textY);
@@ -492,7 +465,9 @@
         }
     }
 
-    function handleStart(x, y) {
+    // --- V2.8 核心：防誤觸事件處理邏輯 ---
+
+    function handleStart(x, y, touchId) {
         audioSys.playBGM();
 
         if (state.gameWon) {
@@ -510,19 +485,27 @@
             return;
         }
 
+        // 如果已經鎖定某根手指，忽略新的觸控 (防止誤觸)
+        if (state.activeTouchId !== null) return;
+
         const hitIsla = checkCollision(x, y, 1, state.isla.x, state.isla.y, CONFIG.imageSize, CONFIG.touchPadding);
         const hitFood = checkCollision(x, y, 1, state.food.x, state.food.y, CONFIG.imageSize, CONFIG.touchPadding);
 
         if (hitIsla) {
             state.isla.isDragging = true;
+            state.activeTouchId = touchId; // 鎖定這根手指的 ID
             if(!state.startTime) state.startTime = Date.now();
         } else if (hitFood) {
             state.food.isDragging = true;
+            state.activeTouchId = touchId; // 鎖定這根手指的 ID
             if(!state.startTime) state.startTime = Date.now();
         }
     }
 
-    function handleMove(x, y) {
+    function handleMove(x, y, touchId) {
+        // 嚴格檢查：只接受被鎖定的那根手指的訊號
+        if (state.activeTouchId !== null && touchId !== state.activeTouchId) return;
+
         let active = state.isla.isDragging ? state.isla : (state.food.isDragging ? state.food : null);
         let target = state.isla.isDragging ? state.food : state.isla;
         
@@ -533,6 +516,7 @@
             const deviation = distToSegment(x, y, state.isla.originalX, state.isla.originalY, state.food.originalX, state.food.originalY);
             if (deviation > CONFIG.tolerance) {
                 active.isDragging = false;
+                state.activeTouchId = null; // 錯誤發生，釋放鎖定，讓學生重抓
                 state.currentErrorCount++; 
                 if (navigator.vibrate) {
                     navigator.vibrate(300);
@@ -543,6 +527,7 @@
                 state.gameWon = true;
                 state.endTime = Date.now();
                 active.isDragging = false;
+                state.activeTouchId = null; // 成功，釋放鎖定
                 const timeTaken = (state.endTime - state.startTime) / 1000;
                 state.sessionTotalErrors += state.currentErrorCount;
                 state.sessionTotalTime += timeTaken;
@@ -554,31 +539,47 @@
         }
     }
 
-    function handleEnd() {
-        state.isla.isDragging = false;
-        state.food.isDragging = false;
+    function handleEnd(touchId) {
+        // 只有當「那根手指」離開時，才停止拖曳
+        if (state.activeTouchId !== null && touchId === state.activeTouchId) {
+            state.isla.isDragging = false;
+            state.food.isDragging = false;
+            state.activeTouchId = null; // 釋放鎖定
+        }
     }
 
+    // --- 事件監聽器 (修改為支援 Multi-touch 辨識) ---
+
     canvas.addEventListener('touchstart', e => { 
-        if(e.touches.length > 1) { e.preventDefault(); return; }
         e.preventDefault(); 
-        handleStart(e.touches[0].clientX, e.touches[0].clientY); 
+        // 遍歷所有新發生的觸控點
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            handleStart(t.clientX, t.clientY, t.identifier);
+        }
     }, {passive: false});
 
     canvas.addEventListener('touchmove', e => { 
-        if(e.touches.length > 1) { e.preventDefault(); return; }
         e.preventDefault(); 
-        handleMove(e.touches[0].clientX, e.touches[0].clientY); 
+        // 遍歷變動的觸控點，尋找我們鎖定的那個 ID
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            handleMove(t.clientX, t.clientY, t.identifier);
+        }
     }, {passive: false});
 
     canvas.addEventListener('touchend', e => { 
         e.preventDefault(); 
-        handleEnd(); 
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            handleEnd(t.identifier);
+        }
     });
     
-    canvas.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
-    canvas.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
-    window.addEventListener('mouseup', handleEnd);
+    // 滑鼠相容性 (滑鼠沒有 ID，給予預設值 999)
+    canvas.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY, 999));
+    canvas.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY, 999));
+    window.addEventListener('mouseup', e => handleEnd(999));
 
     function loop() {
         if (!state.isla.isDragging && !state.gameWon) {
@@ -593,7 +594,7 @@
         requestAnimationFrame(loop);
     }
 
-    // --- 設定 UI 邏輯 ---
+    // --- UI 設定 ---
     const settingsTrigger = document.getElementById('settingsTrigger');
     const settingsModal = document.getElementById('settingsModal');
     let pressTimer;
@@ -642,13 +643,7 @@
         roundsVal.innerText = roundsInput.value;
     };
 
-    const anglesData = [
-        { deg: 0, label: '橫線' },
-        { deg: 90, label: '直線' },
-        { deg: 30, label: '30°' },
-        { deg: 45, label: '45°' },
-        { deg: 60, label: '60°' }
-    ];
+    const anglesData = [{ deg: 0 }, { deg: 90 }, { deg: 30 }, { deg: 45 }, { deg: 60 }];
     const angleGrid = document.getElementById('angleGrid');
     const allAnglesBtn = document.getElementById('allAnglesBtn');
 
@@ -658,12 +653,10 @@
             const div = document.createElement('div');
             div.className = 'angle-option';
             if (CONFIG.activeAngles.includes(a.deg)) div.classList.add('active');
-            
             const r = a.deg * Math.PI / 180;
             const x = 20 * Math.cos(r);
             const y = 20 * Math.sin(r);
             div.innerHTML = `<svg width="40" height="40" viewBox="-20 -20 40 40"><line x1="${-x}" y1="${-y}" x2="${x}" y2="${y}" class="angle-icon" /></svg>`;
-            
             div.onclick = () => toggleAngle(a.deg, div);
             angleGrid.appendChild(div);
         });
@@ -672,7 +665,6 @@
     function toggleAngle(deg, el) {
         CONFIG.isAllAngles = false;
         allAnglesBtn.classList.remove('active');
-        
         if (CONFIG.activeAngles.includes(deg)) {
             CONFIG.activeAngles = CONFIG.activeAngles.filter(d => d !== deg);
             el.classList.remove('active');
@@ -680,7 +672,6 @@
             CONFIG.activeAngles.push(deg);
             el.classList.add('active');
         }
-        
         if (CONFIG.activeAngles.length === 0) {
             CONFIG.isAllAngles = true;
             allAnglesBtn.classList.add('active');
@@ -693,7 +684,6 @@
         allAnglesBtn.classList.add('active');
         renderAngleIcons();
     }
-    
     allAnglesBtn.classList.add('active');
     renderAngleIcons();
 
@@ -702,7 +692,6 @@
         const div = document.createElement('div');
         div.className = 'img-option' + (i === 1 ? ' active' : '');
         div.innerHTML = `<img src="food${i}.jpg" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjNDQ0Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IndoaXRlIj5GNzwvdGV4dD48L3N2Zz4='"><div class="img-label">F${i}</div>`;
-        
         div.onclick = () => {
             document.querySelectorAll('.img-option').forEach(d => d.classList.remove('active'));
             div.classList.add('active');
