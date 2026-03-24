@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>連線遊戲 V2.8 (Anti-Touch)</title>
+    <title>連線遊戲 V2.9 (Anti-Touch Fix)</title>
     <style>
         html, body {
             margin: 0;
@@ -228,9 +228,7 @@
         sessionTotalErrors: 0,
         sessionTotalTime: 0,
         isSessionFinished: false,
-        
-        // --- V2.8 新增：防誤觸鎖定變數 ---
-        activeTouchId: null // 用來記錄當前「有效手指」的 ID
+        activeTouchId: null
     };
 
     const canvas = document.getElementById('gameCanvas');
@@ -276,7 +274,7 @@
         state.currentErrorCount = 0;
         state.startTime = null; 
         state.endTime = null;
-        state.activeTouchId = null; // 重置觸控鎖定
+        state.activeTouchId = null;
 
         const margin = CONFIG.imageSize / 2 + 20;
         const availableW = state.width - margin * 2;
@@ -334,15 +332,12 @@
 
     function drawImageCentered(img, x, y, size) {
         if (!img.complete || img.naturalWidth === 0) return;
-        // 方形背景填補
         ctx.fillStyle = '#222';
         ctx.fillRect(x - size/2, y - size/2, size, size);
-        // Contain 縮放
         const scale = Math.min(size / img.width, size / img.height);
         const w = img.width * scale;
         const h = img.height * scale;
         ctx.drawImage(img, x - w/2, y - h/2, w, h);
-        // 白色外框
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 4;
         ctx.strokeRect(x - size/2, y - size/2, size, size);
@@ -364,7 +359,6 @@
             return;
         }
 
-        // 紅色輔助牆
         const dx = state.food.originalX - state.isla.originalX;
         const dy = state.food.originalY - state.isla.originalY;
         const len = Math.hypot(dx, dy);
@@ -385,7 +379,6 @@
             ctx.stroke();
         }
 
-        // 主線
         ctx.beginPath();
         ctx.strokeStyle = 'white';
         ctx.lineWidth = CONFIG.pathWidth;
@@ -465,8 +458,6 @@
         }
     }
 
-    // --- V2.8 核心：防誤觸事件處理邏輯 ---
-
     function handleStart(x, y, touchId) {
         audioSys.playBGM();
 
@@ -485,7 +476,6 @@
             return;
         }
 
-        // 如果已經鎖定某根手指，忽略新的觸控 (防止誤觸)
         if (state.activeTouchId !== null) return;
 
         const hitIsla = checkCollision(x, y, 1, state.isla.x, state.isla.y, CONFIG.imageSize, CONFIG.touchPadding);
@@ -493,17 +483,16 @@
 
         if (hitIsla) {
             state.isla.isDragging = true;
-            state.activeTouchId = touchId; // 鎖定這根手指的 ID
+            state.activeTouchId = touchId; 
             if(!state.startTime) state.startTime = Date.now();
         } else if (hitFood) {
             state.food.isDragging = true;
-            state.activeTouchId = touchId; // 鎖定這根手指的 ID
+            state.activeTouchId = touchId; 
             if(!state.startTime) state.startTime = Date.now();
         }
     }
 
     function handleMove(x, y, touchId) {
-        // 嚴格檢查：只接受被鎖定的那根手指的訊號
         if (state.activeTouchId !== null && touchId !== state.activeTouchId) return;
 
         let active = state.isla.isDragging ? state.isla : (state.food.isDragging ? state.food : null);
@@ -516,7 +505,7 @@
             const deviation = distToSegment(x, y, state.isla.originalX, state.isla.originalY, state.food.originalX, state.food.originalY);
             if (deviation > CONFIG.tolerance) {
                 active.isDragging = false;
-                state.activeTouchId = null; // 錯誤發生，釋放鎖定，讓學生重抓
+                state.activeTouchId = null; 
                 state.currentErrorCount++; 
                 if (navigator.vibrate) {
                     navigator.vibrate(300);
@@ -527,7 +516,7 @@
                 state.gameWon = true;
                 state.endTime = Date.now();
                 active.isDragging = false;
-                state.activeTouchId = null; // 成功，釋放鎖定
+                state.activeTouchId = null; 
                 const timeTaken = (state.endTime - state.startTime) / 1000;
                 state.sessionTotalErrors += state.currentErrorCount;
                 state.sessionTotalTime += timeTaken;
@@ -539,20 +528,40 @@
         }
     }
 
-    function handleEnd(touchId) {
-        // 只有當「那根手指」離開時，才停止拖曳
+    function handleEnd(touchId, remainingTouches) {
         if (state.activeTouchId !== null && touchId === state.activeTouchId) {
             state.isla.isDragging = false;
             state.food.isDragging = false;
-            state.activeTouchId = null; // 釋放鎖定
+            state.activeTouchId = null; 
+        }
+        
+        // 【防呆終極絕招】如果畫面上沒有任何手指了，無條件清空狀態
+        if (remainingTouches === 0) {
+            state.isla.isDragging = false;
+            state.food.isDragging = false;
+            state.activeTouchId = null;
         }
     }
 
-    // --- 事件監聽器 (修改為支援 Multi-touch 辨識) ---
-
     canvas.addEventListener('touchstart', e => { 
         e.preventDefault(); 
-        // 遍歷所有新發生的觸控點
+        
+        // 【自檢機制】如果記錄中已被鎖定的手指實際上已經不在螢幕上了，強制解除鎖定
+        if (state.activeTouchId !== null) {
+            let stillAlive = false;
+            for (let i = 0; i < e.touches.length; i++) {
+                if (e.touches[i].identifier === state.activeTouchId) {
+                    stillAlive = true; 
+                    break;
+                }
+            }
+            if (!stillAlive) {
+                state.activeTouchId = null;
+                state.isla.isDragging = false;
+                state.food.isDragging = false;
+            }
+        }
+
         for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
             handleStart(t.clientX, t.clientY, t.identifier);
@@ -561,7 +570,6 @@
 
     canvas.addEventListener('touchmove', e => { 
         e.preventDefault(); 
-        // 遍歷變動的觸控點，尋找我們鎖定的那個 ID
         for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
             handleMove(t.clientX, t.clientY, t.identifier);
@@ -572,14 +580,22 @@
         e.preventDefault(); 
         for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
-            handleEnd(t.identifier);
+            handleEnd(t.identifier, e.touches.length);
+        }
+    });
+
+    // 【新增系統中斷防護】捕捉作業系統手勢造成的觸控中斷
+    canvas.addEventListener('touchcancel', e => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            handleEnd(t.identifier, e.touches.length);
         }
     });
     
-    // 滑鼠相容性 (滑鼠沒有 ID，給予預設值 999)
     canvas.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY, 999));
     canvas.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY, 999));
-    window.addEventListener('mouseup', e => handleEnd(999));
+    window.addEventListener('mouseup', e => handleEnd(999, 0));
 
     function loop() {
         if (!state.isla.isDragging && !state.gameWon) {
